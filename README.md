@@ -4,7 +4,7 @@ Implementation of LWW-Element-Set (state based) in Haskell.
 
 # Docs
 
-https://jartur.github.io/lww-hs/LWWSet.html
+https://jartur.github.io/lww-hs/lww-hs-0.1.0.0/LWWSet.html
 
 # Buildchain
 
