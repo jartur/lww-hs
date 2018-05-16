@@ -17,3 +17,7 @@ On MacOs you can also just `brew install haskell-stack`
 ```
 stack test
 ```
+
+# Notes
+
+* Testing can be improved by writing an `Arbitrary` instance for the datastructure and playing with that, but I ran out of time. 
