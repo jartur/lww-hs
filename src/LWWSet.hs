@@ -1,4 +1,6 @@
-module LWWSet where
+module LWWSet(LWWSet, toSet, merge, empty, 
+              unit, query, insert, remove
+             ) where
 
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -42,31 +44,31 @@ instance Ord a => Monoid (LWWSet a) where
 
 -- We consider two LWW sets equal if their reductions to normal sets are equal
 instance (Eq a, Ord a) => Eq (LWWSet a) where
-    s1 == s2 = (lwwSetToSet s1) == (lwwSetToSet s2)
+    s1 == s2 = (toSet s1) == (toSet s2)
 
 -- Reduce LWW set to a normal set whic contains only non-deleted elements
-lwwSetToSet :: (Ord a) => LWWSet a -> S.Set a
-lwwSetToSet s@(LWWSet (TimeStampedSet addMap) _) = 
+toSet :: (Ord a) => LWWSet a -> S.Set a
+toSet s@(LWWSet (TimeStampedSet addMap) _) = 
     M.foldMapWithKey present addMap
     where 
-        present x _ = if lwwSetQuery s x then S.singleton x else S.empty
+        present x _ = if query s x then S.singleton x else S.empty
 
 -- Here we use the fact that LWWSet is a monoid
-lwwSetMerge :: (Ord a) => LWWSet a -> LWWSet a -> LWWSet a
-lwwSetMerge = mappend
+merge :: (Ord a) => LWWSet a -> LWWSet a -> LWWSet a
+merge = mappend
 
 -- Construct an empty set, also from monoid
-lwwSetEmpty :: (Ord a) => LWWSet a
-lwwSetEmpty = mempty
+empty :: (Ord a) => LWWSet a
+empty = mempty
 
 -- Construct an LWW set with a single element 
-lwwSetUnit :: (Ord a) => a -> TimeStamp -> LWWSet a
-lwwSetUnit x ts = lwwSetInsert mempty x ts
+unit :: (Ord a) => a -> TimeStamp -> LWWSet a
+unit x ts = insert mempty x ts
 
 -- Check if the element is in the LWW set, which means it was added the latest add timestamp
 -- is greater that the last removal if any. Here we are biased to removal.
-lwwSetQuery :: (Ord a) => LWWSet a -> a -> Bool
-lwwSetQuery (LWWSet addSet remSet) x = maybe False checkRemoval maybeAdded
+query :: (Ord a) => LWWSet a -> a -> Bool
+query (LWWSet addSet remSet) x = maybe False checkRemoval maybeAdded
     where 
         maybeAdded = tsSetLookup addSet x
         checkRemoval (_, addedTs) = 
@@ -75,9 +77,9 @@ lwwSetQuery (LWWSet addSet remSet) x = maybe False checkRemoval maybeAdded
                 Nothing -> True
 
 -- Add new element to the LWW set                
-lwwSetInsert :: (Ord a) => LWWSet a -> a -> TimeStamp -> LWWSet a
-lwwSetInsert (LWWSet add rem) x ts = LWWSet (tsSetInsert add x ts) rem
+insert :: (Ord a) => LWWSet a -> a -> TimeStamp -> LWWSet a
+insert (LWWSet add rem) x ts = LWWSet (tsSetInsert add x ts) rem
 
 -- Remove an element from the LWW set
-lwwSetRemove :: (Ord a) => LWWSet a -> a -> TimeStamp -> LWWSet a
-lwwSetRemove (LWWSet add rem) x ts = LWWSet add (tsSetInsert rem x ts)
+remove :: (Ord a) => LWWSet a -> a -> TimeStamp -> LWWSet a
+remove (LWWSet add rem) x ts = LWWSet add (tsSetInsert rem x ts)
