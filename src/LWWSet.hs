@@ -1,5 +1,6 @@
 module LWWSet(LWWSet, toSet, merge, empty, 
-              unit, query, insert, remove
+              unit, query, insert, remove,
+              TimeStamp
              ) where
 
 import qualified Data.Map.Strict as M

@@ -35,6 +35,7 @@ insert :: (Ord a) => LWWSet a -> a -> TimeStamp -> LWWSet a
 
 -- | Remove an element from the <a>LWWSet</a>
 remove :: (Ord a) => LWWSet a -> a -> TimeStamp -> LWWSet a
+type TimeStamp = Integer
 instance GHC.Show.Show a => GHC.Show.Show (LWWSet.LWWSet a)
 instance GHC.Show.Show a => GHC.Show.Show (LWWSet.TimeStampedSet a)
 instance GHC.Classes.Ord a => GHC.Base.Monoid (LWWSet.LWWSet a)
