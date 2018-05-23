@@ -1,6 +1,8 @@
 # lww-hs
 
-Implementation of LWW-Element-Set (state based) in Haskell.
+[![Build Status](https://travis-ci.org/jartur/lww-hs.svg?branch=master)](https://travis-ci.org/jartur/lww-hs)
+
+Implementation of LWW-Element-Set (state based) in Haskell & a distributed service built around it.
 
 # Docs
 
@@ -20,4 +22,4 @@ stack test
 
 # Notes
 
-* Testing can be improved by writing an `Arbitrary` instance for the datastructure and playing with that, but I ran out of time. 
+* QuickCheck testing can be improved by writing an `Arbitrary` instance for the datastructure (e.g. to check for commutativity and associativity).
