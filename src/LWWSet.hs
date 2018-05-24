@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module LWWSet(LWWSet, toSet, merge, empty, 
               unit, query, insert, remove,
               TimeStamp
@@ -7,6 +8,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.Monoid
 import Data.Maybe
+import Data.Aeson.Types
 
 type TimeStamp = Integer
 
@@ -18,6 +20,9 @@ data TimeStampedSet a = TimeStampedSet (M.Map a TimeStamp)
 instance Ord a => Monoid (TimeStampedSet a) where 
     mempty = TimeStampedSet mempty
     mappend (TimeStampedSet left) (TimeStampedSet right) = TimeStampedSet $ M.unionWith max left right
+
+instance ToJSONKey a => ToJSON (TimeStampedSet a) where
+    toJSON (TimeStampedSet m) = toJSON m
 
 -- Check if element is in the set
 tsSetQuery :: (Ord a) => TimeStampedSet a -> a -> Bool
@@ -47,6 +52,9 @@ instance Ord a => Monoid (LWWSet a) where
 instance (Eq a, Ord a) => Eq (LWWSet a) where
     s1 == s2 = (toSet s1) == (toSet s2)
 
+instance ToJSONKey a => ToJSON (LWWSet a) where 
+    toJSON (LWWSet add rem) = object ["add" .= add, "rem" .= rem]
+    
 -- | Reduce 'LWWSet' to a normal 'S.Set' which contains only non-deleted elements
 toSet :: (Ord a) => LWWSet a -> S.Set a
 toSet s@(LWWSet (TimeStampedSet addMap) _) = 

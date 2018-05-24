@@ -23,8 +23,8 @@ dependencies:
 - base >= 4.7 && < 5
 - containers >= 0.5.10.2
 - QuickCheck >= 2.10.1
-- distributed-process
-- network-transport-tcp
+- scotty >= 0.11.1
+- aeson 
 
 library:
   source-dirs: src

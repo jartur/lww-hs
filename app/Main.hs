@@ -1,16 +1,18 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import Network.Transport.TCP (createTransport, defaultTCPParameters)
-import Control.Distributed.Process
-import Control.Distributed.Process.Node
+import qualified LWWSet as L
+import Web.Scotty  
+import Data.Monoid (mconcat)
 
-main :: IO ()
-main = do
-    Right t <- createTransport "127.0.0.1" "10501" (\p -> ("127.0.0.1", p)) defaultTCPParameters
-    node <- newLocalNode t initRemoteTable
-    runProcess node $ do
-        -- get our own process id
-        self <- getSelfPid
-        send self "whello"
-        hello <- expect :: Process String
-        liftIO $ putStrLn hello
+ss :: L.LWWSet String
+ss = L.remove (L.unit "setty" 1) "boobies" 2
+
+main = scotty 3000 $ do
+    get "/:set" $ do
+       -- setName <- param "set"
+        json $ ss
+    get "/:set/:elem" $ do
+       -- setName <- param "set"
+        elem <- param "elem"
+        json $ L.query ss elem
