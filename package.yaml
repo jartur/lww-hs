@@ -27,6 +27,7 @@ dependencies:
 - aeson 
 - stm
 - mtl
+- transformers
 
 library:
   source-dirs: src

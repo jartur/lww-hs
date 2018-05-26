@@ -7,6 +7,10 @@ import Web.Scotty
 import Data.Monoid (mconcat)
 import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
 import qualified Control.Concurrent.STM as STM
+import Control.Applicative (Applicative)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Trans.Class (MonadTrans, lift)
+
 
 type StringSet = L.LWWSet String
 ss :: L.LWWSet String
@@ -28,5 +32,5 @@ data AppState = AppState
 
 newtype AppStateM a = AppStateM 
   { runAppStateM :: ReaderT AppState IO a
-
-  }
+  } deriving (Applicative, Functor, Monad,
+    MonadIO, MonadReader AppState)
