@@ -28,6 +28,14 @@ dependencies:
 - stm
 - mtl
 - transformers
+- persistent
+- persistent-sqlite
+- persistent-template
+- monad-logger
+- cmdargs
+- text
+- http-types
+- data-default
 
 library:
   source-dirs: src
