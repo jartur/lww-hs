@@ -61,9 +61,15 @@ getSetHandler = do
 
 getElemHandler :: Handler
 getElemHandler = do
-    -- setName <- param "set"
-    -- elem <- param "elem"
-     json $ (L.empty :: StringSet)--L.query ss elem
+     setName <- param "set"
+     --elem <- param "elem"
+     ls <- runQuery (DB.get (SetModelKey setName))
+     case ls of
+        Nothing -> do
+            status notFound404
+            json Null
+        Just res ->  
+            json $ (L.empty :: StringSet)
 
 data AppState = AppState 
   { appSet :: STM.TVar StringSet
