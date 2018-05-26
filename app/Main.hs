@@ -12,7 +12,7 @@ import Web.Scotty.Trans (ActionT, ScottyT, Options, scottyT, defaultHandler, del
 import Network.HTTP.Types.Status (created201, internalServerError500, notFound404)
 import Data.Monoid (mconcat)
 import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
-import qualified Control.Concurrent.STM as STM
+import Control.Concurrent.STM as STM
 import Control.Applicative (Applicative)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Class (MonadTrans, lift)
@@ -21,6 +21,8 @@ import Data.Text.Lazy as T
 import Data.Text as TS
 import Data.Aeson (Value (Null))
 import qualified Data.Default as DD
+import Data.Time.Clock.System
+import qualified Data.Map.Strict as M
 
 import qualified Database.Persist as DB
 import qualified Database.Persist.Sqlite as DB
@@ -47,32 +49,62 @@ app :: ScottyT T.Text AppStateM ()
 app = do
     get "/:set" getSetHandler
     get "/:set/:elem" getElemHandler
+    put "/:set/:elem" putElementHandler
+    delete "/:set/:elem" deleteElementHandler
+    post "/:set" postSetHandler
+
+putElementHandler :: Handler
+putElementHandler = do 
+    setName <- param "set"
+    elem <- param "elem"
+    s <- lift $ asks appSet  
+    liftIO $ do
+        t <- getSystemTime
+        let ts = (toInteger (systemSeconds t) * 1000) + (toInteger ((systemNanoseconds t) `quot` 1000000))
+        STM.atomically $ do 
+            sets <- readTVar s
+            let current = M.findWithDefault (L.empty) setName sets
+            let updated = L.insert current elem ts
+            writeTVar s $ M.insert setName updated sets
+    json Null
+
+deleteElementHandler :: Handler
+deleteElementHandler = json Null
+
+postSetHandler :: Handler
+postSetHandler = json Null
+
+
+-- runQuery (DB.get (SetModelKey setName))
 
 getSetHandler :: Handler
 getSetHandler = do
     setName <- param "set"
-    ls <- runQuery (DB.get (SetModelKey setName))
+    s <- lift (asks appSet)
+    ls <- liftIO $ do 
+        sets <- readTVarIO s
+        return $ M.lookup setName sets
     case ls of
         Nothing -> do
             status notFound404
             json Null
         Just res ->  
-            json $ (L.empty :: StringSet)
+            json $ res
 
 getElemHandler :: Handler
 getElemHandler = do
      setName <- param "set"
-     --elem <- param "elem"
+     elem <- param "elem"
      ls <- runQuery (DB.get (SetModelKey setName))
      case ls of
         Nothing -> do
             status notFound404
             json Null
         Just res ->  
-            json $ (L.empty :: StringSet)
+            json $ L.query (setModelSet res) elem
 
 data AppState = AppState 
-  { appSet :: STM.TVar StringSet
+  { appSet :: STM.TVar (M.Map String StringSet)
   , toReplicate :: STM.TVar StringSet
   , dbPool :: DB.ConnectionPool
   }
@@ -102,7 +134,7 @@ createDBPool c = do
 initAppState :: Config -> IO AppState
 initAppState c = do
     p <- createDBPool c
-    sv <- STM.newTVarIO $ (L.empty :: StringSet)
+    sv <- STM.newTVarIO $ (M.empty :: M.Map String StringSet) 
     rv <- STM.newTVarIO $ (L.empty :: StringSet)
     return AppState 
         { appSet = sv

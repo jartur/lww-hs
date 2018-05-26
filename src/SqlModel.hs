@@ -16,6 +16,6 @@ import LWWSet (LWWSet)
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 SetModel
     Id Text
-    json (LWWSet String)
+    set (LWWSet String)
     deriving Show
 |]

@@ -37,6 +37,7 @@ dependencies:
 - http-types
 - data-default
 - bytestring
+- time
 
 library:
   source-dirs: src
