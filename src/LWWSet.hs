@@ -49,12 +49,12 @@ instance Ord a => Monoid (LWWSet a) where
         LWWSet (leftAdded `mappend` rightAdded) (leftRem `mappend` rightRem)
 
 -- | We consider two 'LWWSet's equal if their reductions to normal 'S.Set' are equal
-instance (Eq a, Ord a) => Eq (LWWSet a) where
+instance Ord a => Eq (LWWSet a) where
     s1 == s2 = (toSet s1) == (toSet s2)
 
 instance ToJSONKey a => ToJSON (LWWSet a) where 
     toJSON (LWWSet add rem) = object ["add" .= add, "rem" .= rem]
-    
+
 -- | Reduce 'LWWSet' to a normal 'S.Set' which contains only non-deleted elements
 toSet :: (Ord a) => LWWSet a -> S.Set a
 toSet s@(LWWSet (TimeStampedSet addMap) _) = 
