@@ -49,6 +49,18 @@ prop_mergeLinearizesHistory x y = L.merge left right == linear
         right = L.insert (L.remove L.empty x 2) y 3
         linear = L.insert (L.remove (L.remove (L.insert L.empty x 0) y 1) x 2) y 3
 
+prop_exactEqualityForSameContent :: Int -> Int -> Bool
+prop_exactEqualityForSameContent x y = s1 == s2
+    where
+        s1 = L.LWWSetExact $ L.remove (L.unit x 0) y 1
+        s2 = L.LWWSetExact $ L.insert (L.remove L.empty y 1) x 0
+
+prop_exactEqualityFailsForSameContentWithDifferentTimestamps :: Int -> Bool
+prop_exactEqualityFailsForSameContentWithDifferentTimestamps x = not $ s1 == s2
+    where
+        s1 = L.LWWSetExact $ L.unit x 0
+        s2 = L.LWWSetExact $ L.unit x 1
+
 return []
 runTests :: IO Bool
 runTests = $quickCheckAll

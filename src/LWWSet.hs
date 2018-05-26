@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module LWWSet(LWWSet, toSet, merge, empty, 
               unit, query, insert, remove,
-              TimeStamp
+              TimeStamp, LWWSetExact(..)
              ) where
 
 import qualified Data.Map.Strict as M
@@ -23,6 +23,9 @@ instance Ord a => Monoid (TimeStampedSet a) where
 
 instance ToJSONKey a => ToJSON (TimeStampedSet a) where
     toJSON (TimeStampedSet m) = toJSON m
+
+instance Ord a => Eq (TimeStampedSet a) where 
+    (TimeStampedSet m1) == (TimeStampedSet m2) = m1 == m2
 
 -- Check if element is in the set
 tsSetQuery :: (Ord a) => TimeStampedSet a -> a -> Bool
@@ -51,6 +54,17 @@ instance Ord a => Monoid (LWWSet a) where
 -- | We consider two 'LWWSet's equal if their reductions to normal 'S.Set' are equal
 instance Ord a => Eq (LWWSet a) where
     s1 == s2 = (toSet s1) == (toSet s2)
+
+-- | Newtype for exact equality
+newtype LWWSetExact a = LWWSetExact (LWWSet a)
+
+-- | This instance checks for exact equality of two sets.
+--   They will be considered equal iff they have the same 
+--   added elements, the same removed elements and all of 
+--   the respective timestamps are equal.
+instance Ord a => Eq (LWWSetExact a) where 
+    (LWWSetExact (LWWSet added1 removed1)) == (LWWSetExact (LWWSet added2 removed2)) = 
+        (added1 == added2) && (removed1 == removed2)
 
 instance ToJSONKey a => ToJSON (LWWSet a) where 
     toJSON (LWWSet add rem) = object ["add" .= add, "rem" .= rem]
