@@ -38,6 +38,7 @@ dependencies:
 - data-default
 - bytestring
 - time
+- wreq
 
 library:
   source-dirs: src

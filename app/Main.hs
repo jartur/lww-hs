@@ -10,7 +10,7 @@ import Web.Scotty.Trans (ActionT, ScottyT, Options, scottyT, defaultHandler, del
   notFound, param, post, put, scottyOptsT, settings, showError, status, verbose)
 import Network.HTTP.Types.Status (created201, internalServerError500, notFound404)
 import Data.Monoid (mconcat)
-import Control.Monad (when)
+import Control.Monad (when, forever, forM, forM_)
 import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT, ask)
 import Control.Concurrent.STM as STM
 import Control.Applicative (Applicative)
@@ -19,10 +19,12 @@ import Control.Monad.Trans.Class (MonadTrans, lift)
 import Control.Monad.Logger (runNoLoggingT, runStdoutLoggingT)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text as TS
-import Data.Aeson (Value (Null), object)
+import Data.Aeson (Value (Null), object, toJSON)
 import qualified Data.Default as DD
 import Data.Time.Clock.System
 import qualified Data.Map.Strict as M
+import Control.Concurrent (forkIO, threadDelay)
+import qualified Network.Wreq as W
 
 import qualified Database.Persist as DB
 import qualified Database.Persist.Sqlite as DB
@@ -142,6 +144,7 @@ data Config = Config
   , dbFile :: TS.Text
   , port :: Int
   , logging :: Bool
+  , replicationDelay :: Int
   } deriving (Show, Data, Typeable)
 
 config :: Config 
@@ -149,7 +152,8 @@ config = Config
   { initialPeers = []
   , dbFile = "sqlite3.db" 
   , port = 3000
-  , logging = False   
+  , logging = False 
+  , replicationDelay = 5  
   }
 
 createDBPool :: Config -> IO DB.ConnectionPool
@@ -168,19 +172,38 @@ initAppState c = do
     let kv = map (\e -> (keyAsString $ DB.entityKey e, setModelSet $ DB.entityVal e)) fromDb
     sv <- STM.newTVarIO $ (M.fromList kv :: M.Map String StringSet) 
     rv <- STM.newTVarIO $ (M.empty :: M.Map String StringSet)
+    let appState = AppState 
+                    { appSet = sv
+                    , toReplicate = rv
+                    , dbPool = p
+                    }
     ts <- getCurrentTimestamp
     atomically $ do
         sets <- readTVar sv
         let peersSet = (foldr (\e a -> L.insert a e ts) L.empty (initialPeers c) :: StringSet)
         writeTVar sv $ M.insertWith L.merge peerSetName peersSet sets
-    sets <- readTVarIO sv
-    let allPeers = M.findWithDefault L.empty peerSetName sets
+    allPeers <- getPeers appState
     liftIO $ DB.runSqlPool (DB.repsert (SetModelKey peerSetName) (SetModel allPeers)) p
-    return AppState 
-        { appSet = sv
-        , toReplicate = rv
-        , dbPool = p
-        }
+    forkIO $ forever $ do 
+        when (logging c) $ putStrLn "Running replication"
+        runReplication appState
+        threadDelay $ (replicationDelay c) * 1000000
+    return appState
+
+getPeers :: AppState -> IO StringSet
+getPeers s = do
+    let sv = appSet s
+    sets <- readTVarIO sv
+    return $ M.findWithDefault L.empty peerSetName sets
+
+runReplication :: AppState -> IO ()
+runReplication s = do
+    outstanding <- atomically $ swapTVar (toReplicate s) M.empty
+    peers <- getPeers s
+    let peerSet = L.toSet peers
+    forM_ peerSet $ (\peer -> do
+        forM_ (M.toList outstanding) $ (\(setName, set) -> do
+            W.post ("http://" ++ peer ++ "/" ++ setName) (toJSON set)))
 
 keyAsString :: DB.Key SetModel -> String
 keyAsString k = case head $ DB.keyToValues k of
