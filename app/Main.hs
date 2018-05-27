@@ -35,8 +35,10 @@ type SubHandler a = ActionT T.Text AppStateM a
 
 {-
  update the peers list by merging it with command line
- port cmdline
 -}
+peerSetName :: String
+peerSetName = "_peers_"
+
 main = do 
   c <- cmdArgs config
   DB.runSqlite (dbFile c) $ do
@@ -166,6 +168,14 @@ initAppState c = do
     let kv = map (\e -> (keyAsString $ DB.entityKey e, setModelSet $ DB.entityVal e)) fromDb
     sv <- STM.newTVarIO $ (M.fromList kv :: M.Map String StringSet) 
     rv <- STM.newTVarIO $ (M.empty :: M.Map String StringSet)
+    ts <- getCurrentTimestamp
+    atomically $ do
+        sets <- readTVar sv
+        let peersSet = (foldr (\e a -> L.insert a e ts) L.empty (initialPeers c) :: StringSet)
+        writeTVar sv $ M.insertWith L.merge peerSetName peersSet sets
+    sets <- readTVarIO sv
+    let allPeers = M.findWithDefault L.empty peerSetName sets
+    liftIO $ DB.runSqlPool (DB.repsert (SetModelKey peerSetName) (SetModel allPeers)) p
     return AppState 
         { appSet = sv
         , toReplicate = rv
