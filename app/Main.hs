@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Main where
 
 import qualified LWWSet as L
@@ -24,6 +25,7 @@ import qualified Data.Default as DD
 import Data.Time.Clock.System
 import qualified Data.Map.Strict as M
 import Control.Concurrent (forkIO, threadDelay)
+import Control.Exception (catch, SomeException)
 import qualified Network.Wreq as W
 
 import qualified Database.Persist as DB
@@ -97,7 +99,7 @@ postSetHandler = do
     (upd, changed) <- liftIO $ do
         STM.atomically $ do 
             (updated, changed) <- modifySetInTVar (appSet s) setName (\current -> L.merge current postedSet)
-            when changed $ modifySetInTVar (toReplicate s) setName (\current -> L.merge current postedSet)  >> return ()
+            when changed $ modifySetInTVar (toReplicate s) setName (\current -> L.merge current postedSet) >> return ()
             return (updated, changed)
     when changed $ runQuery (DB.repsert (SetModelKey setName) (SetModel upd))
     json True
@@ -112,13 +114,17 @@ modifySetInTVar s setName f = do
                     return (updated, True)
         True -> return (current, False)
 
-getSetHandler :: Handler
-getSetHandler = do
+getSet :: SubHandler (Maybe StringSet)
+getSet = do
     setName <- param "set"
     s <- lift (asks appSet)
-    ls <- liftIO $ do 
+    liftIO $ do 
         sets <- readTVarIO s
         return $ M.lookup setName sets
+
+getSetHandler :: Handler
+getSetHandler = do
+    ls <- getSet
     case ls of
         Nothing -> do
             status notFound404
@@ -128,15 +134,14 @@ getSetHandler = do
 
 getElemHandler :: Handler
 getElemHandler = do
-     setName <- param "set"
      elem <- param "elem"
-     ls <- runQuery (DB.get (SetModelKey setName))
+     ls <- getSet
      case ls of
         Nothing -> do
             status notFound404
             json Null
         Just res ->  
-            json $ L.query (setModelSet res) elem
+            json $ L.query res elem
 
 data AppState = AppState 
   { appSet :: STM.TVar (M.Map String StringSet)
@@ -191,7 +196,9 @@ initAppState c = do
     atomically $ do
         sets <- readTVar sv
         let peersSet = (foldr (\e a -> L.insert a e ts) L.empty (initialPeers c) :: StringSet)
-        writeTVar sv $ M.insertWith L.merge peerSetName peersSet sets
+        let merged = M.insertWith L.merge peerSetName peersSet sets
+        writeTVar sv $ merged
+        writeTVar rv $ merged
     allPeers <- getPeers appState
     liftIO $ DB.runSqlPool (DB.repsert (SetModelKey peerSetName) (SetModel allPeers)) p
     forkIO $ forever $ do 
@@ -202,9 +209,15 @@ initAppState c = do
 
 getPeers :: AppState -> IO StringSet
 getPeers s = do
-    let sv = appSet s
-    sets <- readTVarIO sv
+    sets <- readTVarIO (appSet s)
     return $ M.findWithDefault L.empty peerSetName sets
+
+remPeer :: AppState -> String -> IO ()
+remPeer s peer = do
+    putStrLn $ "removing peer " ++ peer
+    ts <- getCurrentTimestamp
+    atomically $ modifyInTVar (appSet s) peerSetName (\peers -> L.remove peers peer ts)
+    return ()
 
 runReplication :: AppState -> IO ()
 runReplication s = do
@@ -213,7 +226,8 @@ runReplication s = do
     let peerSet = L.toSet peers
     forM_ peerSet $ (\peer -> do
         forM_ (M.toList outstanding) $ (\(setName, set) -> do
-            W.post ("http://" ++ peer ++ "/" ++ setName) (toJSON set)))
+            catch ((W.post ("http://" ++ peer ++ "/" ++ setName) (toJSON set)) >>= putStrLn . show)
+                  (\(e :: SomeException) -> remPeer s peer)))
 
 keyAsString :: DB.Key SetModel -> String
 keyAsString k = case head $ DB.keyToValues k of
