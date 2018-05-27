@@ -55,14 +55,18 @@ app = do
     delete "/:set/:elem" deleteElementHandler
     post "/:set" postSetHandler
 
+getCurrentTimestamp :: IO L.TimeStamp
+getCurrentTimestamp = do
+    t <- getSystemTime
+    return $ (toInteger (systemSeconds t) * 1000) + (toInteger ((systemNanoseconds t) `quot` 1000000))
+
 modifyElement :: (StringSet -> String -> L.TimeStamp -> StringSet) -> SubHandler ()
 modifyElement f = do
     setName <- param "set"
     elem <- param "elem"
     st <- lift ask
     upd <- liftIO $ do
-        t <- getSystemTime
-        let ts = (toInteger (systemSeconds t) * 1000) + (toInteger ((systemNanoseconds t) `quot` 1000000))
+        ts <- getCurrentTimestamp
         STM.atomically $ do 
             let setsVar = appSet st
             sets <- readTVar setsVar
