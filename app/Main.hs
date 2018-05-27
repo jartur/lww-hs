@@ -11,6 +11,7 @@ import Web.Scotty.Trans (ActionT, ScottyT, Options, scottyT, defaultHandler, del
    showError, status, verbose)
 import Network.HTTP.Types.Status (created201, internalServerError500, notFound404)
 import Data.Monoid (mconcat)
+import Control.Monad (when)
 import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
 import Control.Concurrent.STM as STM
 import Control.Applicative (Applicative)
@@ -19,7 +20,7 @@ import Control.Monad.Trans.Class (MonadTrans, lift)
 import Control.Monad.Logger (runNoLoggingT, runStdoutLoggingT)
 import Data.Text.Lazy as T
 import Data.Text as TS
-import Data.Aeson (Value (Null))
+import Data.Aeson (Value (Null), object)
 import qualified Data.Default as DD
 import Data.Time.Clock.System
 import qualified Data.Map.Strict as M
@@ -31,6 +32,7 @@ import System.Console.CmdArgs
 
 type StringSet = L.LWWSet String
 type Handler = ActionT T.Text AppStateM ()
+type SubHandler a = ActionT T.Text AppStateM a
 
 {-
  read db on start
@@ -58,7 +60,7 @@ putElementHandler = do
     setName <- param "set"
     elem <- param "elem"
     s <- lift $ asks appSet  
-    liftIO $ do
+    upd <- liftIO $ do
         t <- getSystemTime
         let ts = (toInteger (systemSeconds t) * 1000) + (toInteger ((systemNanoseconds t) `quot` 1000000))
         STM.atomically $ do 
@@ -66,14 +68,43 @@ putElementHandler = do
             let current = M.findWithDefault (L.empty) setName sets
             let updated = L.insert current elem ts
             writeTVar s $ M.insert setName updated sets
-    json Null
+            return updated
+    runQuery (DB.repsert (SetModelKey $ TS.pack setName) (SetModel upd))
+    json True
 
 deleteElementHandler :: Handler
-deleteElementHandler = json Null
+deleteElementHandler = do 
+    setName <- param "set"
+    elem <- param "elem"
+    s <- lift $ asks appSet  
+    upd <- liftIO $ do
+        t <- getSystemTime
+        let ts = (toInteger (systemSeconds t) * 1000) + (toInteger ((systemNanoseconds t) `quot` 1000000))
+        STM.atomically $ do 
+            sets <- readTVar s
+            let current = M.findWithDefault (L.empty) setName sets
+            let updated = L.remove current elem ts
+            writeTVar s $ M.insert setName updated sets
+            return updated
+    runQuery (DB.repsert (SetModelKey $ TS.pack setName) (SetModel upd))
+    json True
 
 postSetHandler :: Handler
-postSetHandler = json Null
-
+postSetHandler = do 
+    setName <- param "set"
+    postedSet <- jsonData
+    s <- lift $ asks appSet  
+    (upd, changed) <- liftIO $ do
+        STM.atomically $ do 
+            sets <- readTVar s
+            let current = M.findWithDefault (L.empty) setName sets
+            let updated = L.merge current postedSet
+            case L.LWWSetExact current == L.LWWSetExact updated of
+                False -> do writeTVar s $ M.insert setName updated sets
+                            return (updated, True)
+                True -> return (current, False)
+    when changed $ runQuery (DB.repsert (SetModelKey $ TS.pack setName) (SetModel upd))
+    json True
 
 -- runQuery (DB.get (SetModelKey setName))
 
@@ -105,7 +136,7 @@ getElemHandler = do
 
 data AppState = AppState 
   { appSet :: STM.TVar (M.Map String StringSet)
-  , toReplicate :: STM.TVar StringSet
+  , toReplicate :: STM.TVar (M.Map String StringSet)
   , dbPool :: DB.ConnectionPool
   }
 
@@ -135,15 +166,14 @@ initAppState :: Config -> IO AppState
 initAppState c = do
     p <- createDBPool c
     sv <- STM.newTVarIO $ (M.empty :: M.Map String StringSet) 
-    rv <- STM.newTVarIO $ (L.empty :: StringSet)
+    rv <- STM.newTVarIO $ (M.empty :: M.Map String StringSet)
     return AppState 
         { appSet = sv
         , toReplicate = rv
         , dbPool = p
         }
 
-runQuery :: (MonadTrans t, MonadIO (t AppStateM)) => 
-    DB.SqlPersistT IO a -> t AppStateM a
+runQuery :: DB.SqlPersistT IO a -> SubHandler a
 runQuery q = do
     p <- lift (asks dbPool)
     liftIO $ DB.runSqlPool q p
