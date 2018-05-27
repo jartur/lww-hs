@@ -37,9 +37,6 @@ type StringSet = L.LWWSet String
 type Handler = ActionT T.Text AppStateM ()
 type SubHandler a = ActionT T.Text AppStateM a
 
-{-
- update the peers list by merging it with command line
--}
 peerSetName :: String
 peerSetName = "_peers_"
 

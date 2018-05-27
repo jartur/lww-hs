@@ -39,6 +39,7 @@ dependencies:
 - bytestring
 - time
 - wreq
+- random
 
 library:
   source-dirs: src
@@ -47,6 +48,33 @@ executables:
   lww-hs-app:
     main:             Main.hs
     source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - lww-hs
+  lww-hs-monkey-normal:
+    main:             Main.hs
+    source-dirs:         monkeys/normal
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - lww-hs
+  lww-hs-monkey-onoff:
+    main:             Main.hs
+    source-dirs:         monkeys/onoff
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - lww-hs
+  lww-hs-monkey-viewer:
+    main:             Main.hs
+    source-dirs:         monkeys/viewer
     ghc-options:
     - -threaded
     - -rtsopts
