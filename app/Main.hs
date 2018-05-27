@@ -160,6 +160,7 @@ data Config = Config
   , port :: Int
   , logging :: Bool
   , replicationDelay :: Int
+  , fullReplicationDelay :: Int
   } deriving (Show, Data, Typeable)
 
 config :: Config 
@@ -168,7 +169,8 @@ config = Config
   , dbFile = "sqlite3.db" 
   , port = 3000
   , logging = False 
-  , replicationDelay = 5  
+  , replicationDelay = 5
+  , fullReplicationDelay = 60 
   }
 
 createDBPool :: Config -> IO DB.ConnectionPool
@@ -205,6 +207,10 @@ initAppState c = do
         when (logging c) $ putStrLn "Running replication"
         runReplication appState
         threadDelay $ (replicationDelay c) * 1000000
+    forkIO $ forever $ do 
+        when (logging c) $ putStrLn "Running full replication"
+        runFullReplication appState
+        threadDelay $ (fullReplicationDelay c) * 1000000 
     return appState
 
 getPeers :: AppState -> IO StringSet
@@ -223,9 +229,19 @@ runReplication :: AppState -> IO ()
 runReplication s = do
     outstanding <- atomically $ swapTVar (toReplicate s) M.empty
     peers <- getPeers s
+    replicateSets s outstanding peers
+
+runFullReplication :: AppState -> IO ()
+runFullReplication s = do
+    sets <- readTVarIO (appSet s)
+    peers <- getPeers s
+    replicateSets s sets peers
+
+replicateSets :: AppState -> (M.Map String StringSet) -> StringSet -> IO ()
+replicateSets s sets peers = do
     let peerSet = L.toSet peers
     forM_ peerSet $ (\peer -> do
-        forM_ (M.toList outstanding) $ (\(setName, set) -> do
+        forM_ (M.toList sets) $ (\(setName, set) -> do
             catch ((W.post ("http://" ++ peer ++ "/" ++ setName) (toJSON set)) >>= putStrLn . show)
                   (\(e :: SomeException) -> remPeer s peer)))
 
