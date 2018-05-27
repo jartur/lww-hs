@@ -7,8 +7,7 @@ import qualified LWWSet as L
 import SqlModel
 
 import Web.Scotty.Trans (ActionT, ScottyT, Options, scottyT, defaultHandler, delete, get, json, jsonData, middleware,
-  notFound, param, post, put, scottyOptsT, settings,
-   showError, status, verbose)
+  notFound, param, post, put, scottyOptsT, settings, showError, status, verbose)
 import Network.HTTP.Types.Status (created201, internalServerError500, notFound404)
 import Data.Monoid (mconcat)
 import Control.Monad (when)
@@ -35,7 +34,6 @@ type Handler = ActionT T.Text AppStateM ()
 type SubHandler a = ActionT T.Text AppStateM a
 
 {-
- read db on start
  update the peers list by merging it with command line
  port cmdline
 -}
@@ -45,7 +43,7 @@ main = do
    DB.runMigration migrateAll 
   s <- initAppState c
   let r m = runReaderT (runAppStateM m) s
-  scottyT 3000 r app 
+  scottyT (port c) r app 
 
 app :: ScottyT T.Text AppStateM ()
 app = do
@@ -140,19 +138,26 @@ newtype AppStateM a = AppStateM
 data Config = Config 
   { initialPeers :: [String] 
   , dbFile :: TS.Text
+  , port :: Int
+  , logging :: Bool
   } deriving (Show, Data, Typeable)
 
 config :: Config 
 config = Config 
   { initialPeers = []
-  , dbFile = "sqlite3.db"    
+  , dbFile = "sqlite3.db" 
+  , port = 3000
+  , logging = False   
   }
 
 createDBPool :: Config -> IO DB.ConnectionPool
 createDBPool c = do
     let connectionString = dbFile c
     let poolSize = 1
-    runStdoutLoggingT (DB.createSqlitePool connectionString poolSize)
+    if logging c then 
+        runStdoutLoggingT (DB.createSqlitePool connectionString poolSize)
+    else 
+        runNoLoggingT (DB.createSqlitePool connectionString poolSize)
 
 initAppState :: Config -> IO AppState
 initAppState c = do
