@@ -96,6 +96,16 @@ Note that you can list as many initial peers as you want by repeating the option
 ~/.local/bin/lww-hs-monkey-viewer -a host:port -s _peers_
 ```
 
+# Lessons learned
+
+It has been an intense experience, because while I have been using Haskell for quite some time to solve programming challenges and writing small simple tools this one is my first _real_ application so I had to spend a loooot of time to actually work out how to use Scoty + Database backend + manage state all throughout. 
+
+Sometimes it was just an excersise in futility, when typechecker screams at you something completely _nonsensical_ and you are just staring at the screen, almost crying inside. "I don't understand what do you want from me!". But then again and again I conquered the issues, thus this actually kinda works.
+
+Now, I bit more than I can chew, so I had spend way too much time on battling with the unfamiliar (turns out Haskell is still hard if you don't practice it all the time) instead of improving the solution itself. It's very unfortunate because I had the idea how to solve this problem very early into the development, and had I just chosen Java or Kotlin or Scala or even Clojure, I could have done so much more.
+
+That is a good lesson, but also I am happy that I have broken the walls I had encountered and learned a lot in a rather short time. 
+
 # TODO
 
 * QuickCheck testing can be improved by writing an `Arbitrary` instance for the datastructure (e.g. to check for commutativity and associativity).
@@ -106,3 +116,4 @@ Note that you can list as many initial peers as you want by repeating the option
 * Proper error handling.
 * Docker deployment
 * Don't use timestamps? Wall clock is super unreliable, especially when we can have a local copy on offline client. Maybe vector clock? Need to investigate the options here.
+* And so much more
