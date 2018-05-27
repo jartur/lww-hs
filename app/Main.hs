@@ -12,7 +12,7 @@ import Web.Scotty.Trans (ActionT, ScottyT, Options, scottyT, defaultHandler, del
 import Network.HTTP.Types.Status (created201, internalServerError500, notFound404)
 import Data.Monoid (mconcat)
 import Control.Monad (when)
-import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
+import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT, ask)
 import Control.Concurrent.STM as STM
 import Control.Applicative (Applicative)
 import Control.Monad.IO.Class (MonadIO, liftIO)
@@ -55,39 +55,29 @@ app = do
     delete "/:set/:elem" deleteElementHandler
     post "/:set" postSetHandler
 
-putElementHandler :: Handler
-putElementHandler = do 
+modifyElement :: (StringSet -> String -> L.TimeStamp -> StringSet) -> SubHandler ()
+modifyElement f = do
     setName <- param "set"
     elem <- param "elem"
-    s <- lift $ asks appSet  
+    st <- lift ask
     upd <- liftIO $ do
         t <- getSystemTime
         let ts = (toInteger (systemSeconds t) * 1000) + (toInteger ((systemNanoseconds t) `quot` 1000000))
         STM.atomically $ do 
-            sets <- readTVar s
+            let setsVar = appSet st
+            sets <- readTVar setsVar
             let current = M.findWithDefault (L.empty) setName sets
-            let updated = L.insert current elem ts
-            writeTVar s $ M.insert setName updated sets
+            let updated = f current elem ts
+            writeTVar setsVar $ M.insert setName updated sets
             return updated
     runQuery (DB.repsert (SetModelKey $ TS.pack setName) (SetModel upd))
     json True
 
+putElementHandler :: Handler
+putElementHandler = modifyElement L.insert
+
 deleteElementHandler :: Handler
-deleteElementHandler = do 
-    setName <- param "set"
-    elem <- param "elem"
-    s <- lift $ asks appSet  
-    upd <- liftIO $ do
-        t <- getSystemTime
-        let ts = (toInteger (systemSeconds t) * 1000) + (toInteger ((systemNanoseconds t) `quot` 1000000))
-        STM.atomically $ do 
-            sets <- readTVar s
-            let current = M.findWithDefault (L.empty) setName sets
-            let updated = L.remove current elem ts
-            writeTVar s $ M.insert setName updated sets
-            return updated
-    runQuery (DB.repsert (SetModelKey $ TS.pack setName) (SetModel upd))
-    json True
+deleteElementHandler = modifyElement L.remove
 
 postSetHandler :: Handler
 postSetHandler = do 
