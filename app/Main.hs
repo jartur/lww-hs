@@ -18,8 +18,8 @@ import Control.Applicative (Applicative)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Class (MonadTrans, lift)
 import Control.Monad.Logger (runNoLoggingT, runStdoutLoggingT)
-import Data.Text.Lazy as T
-import Data.Text as TS
+import qualified Data.Text.Lazy as T
+import qualified Data.Text as TS
 import Data.Aeson (Value (Null), object)
 import qualified Data.Default as DD
 import Data.Time.Clock.System
@@ -74,7 +74,7 @@ modifyElement f = do
             let updated = f current elem ts
             writeTVar setsVar $ M.insert setName updated sets
             return updated
-    runQuery (DB.repsert (SetModelKey $ TS.pack setName) (SetModel upd))
+    runQuery (DB.repsert (SetModelKey setName) (SetModel upd))
     json True
 
 putElementHandler :: Handler
@@ -97,10 +97,8 @@ postSetHandler = do
                 False -> do writeTVar s $ M.insert setName updated sets
                             return (updated, True)
                 True -> return (current, False)
-    when changed $ runQuery (DB.repsert (SetModelKey $ TS.pack setName) (SetModel upd))
+    when changed $ runQuery (DB.repsert (SetModelKey setName) (SetModel upd))
     json True
-
--- runQuery (DB.get (SetModelKey setName))
 
 getSetHandler :: Handler
 getSetHandler = do
@@ -159,13 +157,20 @@ createDBPool c = do
 initAppState :: Config -> IO AppState
 initAppState c = do
     p <- createDBPool c
-    sv <- STM.newTVarIO $ (M.empty :: M.Map String StringSet) 
+    fromDb <- liftIO $ DB.runSqlPool (DB.selectList [] []) p
+    let kv = map (\e -> (keyAsString $ DB.entityKey e, setModelSet $ DB.entityVal e)) fromDb
+    sv <- STM.newTVarIO $ (M.fromList kv :: M.Map String StringSet) 
     rv <- STM.newTVarIO $ (M.empty :: M.Map String StringSet)
     return AppState 
         { appSet = sv
         , toReplicate = rv
         , dbPool = p
         }
+
+keyAsString :: DB.Key SetModel -> String
+keyAsString k = case head $ DB.keyToValues k of
+    DB.PersistText t -> TS.unpack t
+    _ -> error "Can't parse key"
 
 runQuery :: DB.SqlPersistT IO a -> SubHandler a
 runQuery q = do

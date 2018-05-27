@@ -15,7 +15,7 @@ import LWWSet (LWWSet)
 -- | Just a simple wrapper to use with Sqlite backend
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 SetModel
-    Id Text
+    Id String
     set (LWWSet String)
     deriving Show
 |]
