@@ -70,14 +70,18 @@ modifyElement f = do
     upd <- liftIO $ do
         ts <- getCurrentTimestamp
         STM.atomically $ do 
-            let setsVar = appSet st
-            sets <- readTVar setsVar
-            let current = M.findWithDefault (L.empty) setName sets
-            let updated = f current elem ts
-            writeTVar setsVar $ M.insert setName updated sets
-            return updated
+            modifyInTVar (toReplicate st) setName (\current -> f current elem ts)
+            modifyInTVar (appSet st) setName (\current -> f current elem ts)
     runQuery (DB.repsert (SetModelKey setName) (SetModel upd))
     json True
+
+modifyInTVar :: TVar (M.Map String StringSet) -> String -> (StringSet -> StringSet) -> STM StringSet
+modifyInTVar setsVar setName f = do
+    sets <- readTVar setsVar
+    let current = M.findWithDefault (L.empty) setName sets
+    let updated = f current
+    writeTVar setsVar $ M.insert setName updated sets
+    return updated
 
 putElementHandler :: Handler
 putElementHandler = modifyElement L.insert
@@ -89,18 +93,24 @@ postSetHandler :: Handler
 postSetHandler = do 
     setName <- param "set"
     postedSet <- jsonData
-    s <- lift $ asks appSet  
+    s <- lift $ ask  
     (upd, changed) <- liftIO $ do
         STM.atomically $ do 
-            sets <- readTVar s
-            let current = M.findWithDefault (L.empty) setName sets
-            let updated = L.merge current postedSet
-            case L.LWWSetExact current == L.LWWSetExact updated of
-                False -> do writeTVar s $ M.insert setName updated sets
-                            return (updated, True)
-                True -> return (current, False)
+            (updated, changed) <- modifySetInTVar (appSet s) setName (\current -> L.merge current postedSet)
+            when changed $ modifySetInTVar (toReplicate s) setName (\current -> L.merge current postedSet)  >> return ()
+            return (updated, changed)
     when changed $ runQuery (DB.repsert (SetModelKey setName) (SetModel upd))
     json True
+
+modifySetInTVar :: TVar (M.Map String StringSet) -> String -> (StringSet -> StringSet) -> STM (StringSet, Bool)
+modifySetInTVar s setName f = do
+    sets <- readTVar s
+    let current = M.findWithDefault (L.empty) setName sets
+    let updated = f current
+    case L.LWWSetExact current == L.LWWSetExact updated of
+        False -> do writeTVar s $ M.insert setName updated sets
+                    return (updated, True)
+        True -> return (current, False)
 
 getSetHandler :: Handler
 getSetHandler = do
