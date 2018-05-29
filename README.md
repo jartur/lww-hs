@@ -6,6 +6,20 @@ Implementation of LWW-Element-Set (state based) in Haskell & a distributed servi
 
 # Docs
 
+## API
+
+| Method | Path | Payload | Response | Comment
+| ------ | ---- | ------- | -------- | -------
+| GET     |`/<set>` |       | Set as JSON | 
+| GET | `/<set>/<elem>` | | true/false for presense | 
+| POST | `/<set>` | Set as JSON | null | Merges the complete set, used for cluster activities as well
+| PUT | `/<set>/<elem>` | None expected | null | Will create specified element †
+| DELETE | `/<set>/<elem>` | | null | Removes element from the set
+  
+† In retrospective probably should be at path `/<set>` and accept the element in payload.
+
+## Library
+
 https://jartur.github.io/lww-hs/lww-hs-0.1.0.0/LWWSet.html
 
 # Architecture
